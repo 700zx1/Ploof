@@ -1,5 +1,6 @@
 import sys
 import json
+import logging
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QMenu, QLabel  # Add QLabel here
@@ -8,7 +9,11 @@ from PyQt6.QtGui import QPalette, QColor, QAction, QMovie  # Add QMovie here
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal  # Add QTimer, QThread, pyqtSignal import
 
 from scraper_1337x import search_1337x, get_magnet_link
+from scraper_jackett import search_jackett
 from premiumize_api import PremiumizeClient, load_or_prompt_token
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class SearchThread(QThread):
     search_finished = pyqtSignal(list)  # Signal to emit search results
@@ -18,9 +23,19 @@ class SearchThread(QThread):
         self.query = query
 
     def run(self):
-        # Perform the search in this thread
-        results = search_1337x(self.query)
-        self.search_finished.emit(results)  # Emit the results when done
+        try:
+            logging.debug(f"Starting search for query: {self.query}")
+            #results_1337x = search_1337x(self.query)
+            results_1337x = []  # Placeholder for 1337x results
+            #remove the comment to enable 1337x search
+            results_jackett = search_jackett(self.query)
+            results = results_jackett  # Use Jackett results for now
+
+            logging.debug(f"Search completed. Found {len(results)} results (1337x: {len(results_1337x)}, Jackett: {len(results_jackett)}).")
+            self.search_finished.emit(results)
+        except Exception as e:
+            logging.error(f"Error during search: {e}", exc_info=True)
+            self.search_finished.emit([])  # Emit empty results on error
 
 
 class TorrentSearchApp(QMainWindow):
@@ -62,6 +77,9 @@ class TorrentSearchApp(QMainWindow):
         self.searching_timer = QTimer()
         self.searching_timer.timeout.connect(self.update_search_button_text)
         self.searching_dots = 0  # Counter for the scrolling dots
+
+        # Connect the Enter key to trigger the search
+        self.search_bar.returnPressed.connect(self.perform_search)
 
     def perform_search(self):
         query = self.search_bar.text().strip()
